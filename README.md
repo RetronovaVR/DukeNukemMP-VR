@@ -1,15 +1,16 @@
 # Duke Nukem: Manhattan Project - OpenXR VR Mod
 
-A full 6DoF stereoscopic Virtual Reality modification for **Duke Nukem: Manhattan Project** (2002), built as an OpenXR Direct3D 8 wrapper.
+A native stereoscopic Virtual Reality modification for **Duke Nukem: Manhattan Project** (2002), built as an OpenXR Direct3D 8 wrapper. Designed as a comfortable seated experience using a gamepad or keyboard.
 
-Experience Duke Nukem's classic platformer in fully immersive 3D directly on modern VR headsets (Meta Quest 2 / 3 / Pro, Valve Index, HTC Vive, Pico 4, and other OpenXR runtimes).
+Experience Duke Nukem's classic platformer in fully immersive stereoscopic 3D directly on modern VR headsets (Meta Quest 2 / 3 / Pro, Valve Index, HTC Vive, Pico 4, and other OpenXR runtimes).
 
 ---
 
 ## Features
 
-- **Full 360° Stereoscopic VR**: Native stereoscopic dual-viewport projection directly mapped to your headset's physical lens geometry and IPD.
-- **True 6DoF Positional Tracking**: Accurate 1:1 real-world to in-game unit conversion (1 meter = 24 game units, matching Duke's 48-unit height). Lean forward, peer around corners, duck, and inspect enemies with natural head motion.
+- **Full Stereoscopic 3D VR**: Native dual-viewport projection directly mapped to your headset's physical lens geometry and IPD.
+- **Seated 3DoF / Rotational Head Tracking**: Smooth rotational orientation tracking designed specifically for comfortable gamepad play.
+- **Experimental 6DoF Positional Tracking**: Includes real-time hotkeys to tune positional translation (`TrackingPosScale`) and world scale (`WorldScale`).
 - **Engine Frustum Culling Bypass**: Dynamic runtime memory patch for Prism3D that eliminates edge culling, keeping distant skyscrapers and surrounding environments permanently rendered.
 - **Zero-Latency DMA Pipeline**: High-performance double-buffered AVX2 transfer pipeline for 4K+ VR rendering at a rock-solid 90 FPS.
 - **DXVK Vulkan Integration**: Bypasses legacy DirectX driver overhead via Vulkan for minimal queue latency and stutter-free tracking.
