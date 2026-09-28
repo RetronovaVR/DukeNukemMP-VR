@@ -322,14 +322,25 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice8::Present(const RECT *pSourceRect, cons
 		g_OpenXR.Update();
 	}
 
+	static LARGE_INTEGER lastMonitorPresent = { 0 };
+	static LARGE_INTEGER perfFreq = { 0 };
+	if (perfFreq.QuadPart == 0) QueryPerformanceFrequency(&perfFreq);
+
+	LARGE_INTEGER now;
+	QueryPerformanceCounter(&now);
+	LONGLONG elapsed = now.QuadPart - lastMonitorPresent.QuadPart;
+	LONGLONG minInterval = perfFreq.QuadPart / 30; // present to PC desktop companion at ~30 fps
+	bool bShouldPresentMonitor = (elapsed >= minInterval);
+
 	if (g_VRConfig.bEnableVR && (g_OpenXR.m_bSessionRunning || g_VRConfig.bDebugSBS))
 	{
 		IDirect3DSurface9* pBackBuffer = nullptr;
 		if (SUCCEEDED(ProxyInterface->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &pBackBuffer)))
 		{
 			if (g_OpenXR.m_bSessionRunning && !g_VRConfig.bDebugSBS) {
-				// Send stereo frame to OpenXR headset and blit single eye to monitor backbuffer
-				g_OpenXR.RenderDirect(ProxyInterface, pBackBuffer, true);
+				// Only blit mirror if mirror is enabled and this frame is actually being presented to the monitor
+				bool bNeedMirror = bShouldPresentMonitor && (g_VRConfig.iMirrorMode >= 0) && (g_VRConfig.iMirrorWidth > 0) && (g_VRConfig.iMirrorHeight > 0);
+				g_OpenXR.RenderDirect(ProxyInterface, pBackBuffer, bNeedMirror);
 			}
 
 			pBackBuffer->Release();
@@ -341,27 +352,20 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice8::Present(const RECT *pSourceRect, cons
 		g_OpenXR.AbortFrame();
 	}
 
-	if (!g_OpenXR.m_bSessionRunning && g_VRConfig.iFPSLimit > 0)
+	if (g_VRConfig.iFPSLimit > 0)
 	{
 		LimitFrameRate(g_VRConfig.iFPSLimit);
 	}
 
 	if (g_VRConfig.bEnableVR && g_OpenXR.m_bSessionRunning)
 	{
-		// Decouple VR frame rate from the desktop monitor (e.g. 60 Hz monitor vs 72/80/90/120 Hz Quest):
-		// The OpenXR headset has already received the stereo frame at the full VR refresh rate.
-		// Rate-limit the desktop companion window presentation to at most ~58 FPS so that calling Present()
-		// never fills the DWM composition queue or blocks on the desktop monitor's 60 Hz VBlank.
-		static LARGE_INTEGER lastMonitorPresent = { 0 };
-		static LARGE_INTEGER perfFreq = { 0 };
-		if (perfFreq.QuadPart == 0) QueryPerformanceFrequency(&perfFreq);
+		// If mirror is disabled, do not present to monitor at all (saves 100% monitor presentation overhead)
+		if (g_VRConfig.iMirrorMode < 0 || g_VRConfig.iMirrorWidth <= 0 || g_VRConfig.iMirrorHeight <= 0)
+		{
+			return D3D_OK;
+		}
 
-		LARGE_INTEGER now;
-		QueryPerformanceCounter(&now);
-		LONGLONG elapsed = now.QuadPart - lastMonitorPresent.QuadPart;
-		LONGLONG minInterval = perfFreq.QuadPart / 30; // present to PC desktop companion at ~30 fps
-
-		if (elapsed >= minInterval)
+		if (bShouldPresentMonitor)
 		{
 			HRESULT hrPres = ProxyInterface->Present(nullptr, nullptr, hDestWindowOverride, nullptr);
 			QueryPerformanceCounter(&lastMonitorPresent);

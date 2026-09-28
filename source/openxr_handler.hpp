@@ -147,8 +147,10 @@ public:
     // Improvement #6: Hardware GPU Downscale Surface (4K SSAA -> 1440p transfer for high-FPS VR)
     IDirect3DSurface9*   m_pD3D9DownscaleSurf = nullptr;
 
-    // Improvement #4: Dedicated D3D9 mirror surface (left-eye only, for clean monitor output)
+    // Improvement #4: Dedicated D3D9 mirror surface (left-eye only, lightweight companion window)
     IDirect3DSurface9*   m_pD3D9MirrorSurf  = nullptr;
+    UINT                 m_nMirrorWidth     = 0;
+    UINT                 m_nMirrorHeight    = 0;
     IDirect3DQuery9*     m_pD3D9FlushQuery  = nullptr;
 
     // Improvement #1: Frame state stored across BeginFrame / RenderDirect
@@ -917,16 +919,32 @@ public:
                 LogXR("Initialized High-Performance Double-Buffered AVX2 Transfer: %dx%d (Render %dx%d)", transferW, transferH, desc.Width, desc.Height);
             }
 
-            // 3. Mirror RenderTarget for desktop companion window:
-            // Full backbuffer size render target allows StretchRect to perform arbitrary linear scaling/blitting
-            HRESULT hrMirror = pDevice9->CreateRenderTarget(
-                desc.Width, desc.Height,
-                desc.Format, D3DMULTISAMPLE_NONE, 0, FALSE,
-                &m_pD3D9MirrorSurf, NULL);
-            if (SUCCEEDED(hrMirror)) {
-                LogXR("Desktop Mirror RenderTarget created: %dx%d (single clean monitor view)", desc.Width, desc.Height);
+            // 3. Mirror RenderTarget for desktop companion window (independent lightweight resolution)
+            if (g_VRConfig.iMirrorMode >= 0 && g_VRConfig.iMirrorWidth > 0 && g_VRConfig.iMirrorHeight > 0) {
+                UINT mirrorW = (UINT)g_VRConfig.iMirrorWidth;
+                UINT mirrorH = (UINT)g_VRConfig.iMirrorHeight;
+                if (mirrorW > desc.Width) mirrorW = desc.Width;
+                if (mirrorH > desc.Height) mirrorH = desc.Height;
+
+                if (!m_pD3D9MirrorSurf || m_nMirrorWidth != mirrorW || m_nMirrorHeight != mirrorH) {
+                    if (m_pD3D9MirrorSurf) { m_pD3D9MirrorSurf->Release(); m_pD3D9MirrorSurf = nullptr; }
+                    m_nMirrorWidth  = mirrorW;
+                    m_nMirrorHeight = mirrorH;
+
+                    HRESULT hrMirror = pDevice9->CreateRenderTarget(
+                        mirrorW, mirrorH,
+                        desc.Format, D3DMULTISAMPLE_NONE, 0, FALSE,
+                        &m_pD3D9MirrorSurf, NULL);
+                    if (SUCCEEDED(hrMirror)) {
+                        LogXR("Desktop Mirror RenderTarget created: %dx%d (lightweight companion window)", mirrorW, mirrorH);
+                    } else {
+                        LogXR("ERROR: Failed to create Desktop Mirror RenderTarget: hr=0x%08X", hrMirror);
+                    }
+                }
             } else {
-                LogXR("ERROR: Failed to create Desktop Mirror RenderTarget: hr=0x%08X", hrMirror);
+                if (m_pD3D9MirrorSurf) { m_pD3D9MirrorSurf->Release(); m_pD3D9MirrorSurf = nullptr; }
+                m_nMirrorWidth  = 0;
+                m_nMirrorHeight = 0;
             }
 
             // 4. Resize OpenXR swapchains if needed
@@ -941,23 +959,25 @@ public:
         // ── Step 1: Prepare mirror surface from ORIGINAL SBS backbuffer (D3D9 GPU work — BEFORE any readback) ──
         // This must happen BEFORE GetRenderTargetData so the readback captures original SBS (not mirrored).
         // After xrEndFrame, we blit mirrorSurf → backbuffer for the PC companion window.
-        if (bMirror && m_pD3D9MirrorSurf) {
+        if (bMirror && m_pD3D9MirrorSurf && m_nMirrorWidth > 0 && m_nMirrorHeight > 0) {
             UINT halfW = desc.Width / 2;
             RECT srcLeft = { 0, 0, (LONG)halfW, (LONG)desc.Height };
             RECT destRect;
 
             if (g_VRConfig.iMirrorMode == 1) {
-                // Mode 1: Fullscreen 16:9 crop (fills entire monitor without black bars)
-                LONG cropH  = (LONG)(halfW * desc.Height / desc.Width);
+                // Mode 1: Fullscreen 16:9 crop (fills entire mirror without black bars)
+                LONG cropH  = (LONG)((uint64_t)halfW * m_nMirrorHeight / m_nMirrorWidth);
+                if (cropH > (LONG)desc.Height) cropH = desc.Height;
                 LONG offsetY = (LONG)(desc.Height - cropH) / 2;
                 srcLeft.top    = offsetY;
                 srcLeft.bottom = offsetY + cropH;
-                destRect = { 0, 0, (LONG)desc.Width, (LONG)desc.Height };
+                destRect = { 0, 0, (LONG)m_nMirrorWidth, (LONG)m_nMirrorHeight };
             } else {
-                // Mode 0: Aspect-fit / Pillarbox
-                LONG fitW   = (LONG)halfW;
-                LONG offsetX = (LONG)(desc.Width - fitW) / 2;
-                destRect = { offsetX, 0, offsetX + fitW, (LONG)desc.Height };
+                // Mode 0: Aspect-fit / Pillarbox (preserves full vertical FOV with pillarboxing)
+                LONG fitW   = (LONG)((uint64_t)halfW * m_nMirrorHeight / desc.Height);
+                if (fitW > (LONG)m_nMirrorWidth) fitW = m_nMirrorWidth;
+                LONG offsetX = (LONG)(m_nMirrorWidth - fitW) / 2;
+                destRect = { offsetX, 0, offsetX + fitW, (LONG)m_nMirrorHeight };
             }
 
             pDevice9->ColorFill(m_pD3D9MirrorSurf, nullptr, D3DCOLOR_XRGB(0, 0, 0));
@@ -1041,8 +1061,11 @@ public:
         }
         if (!pSourceTex) {
             // Still blit mirror to backbuffer even if OpenXR submission fails
-            if (bMirror && m_pD3D9MirrorSurf)
-                pDevice9->StretchRect(m_pD3D9MirrorSurf, nullptr, pBackBuffer, nullptr, D3DTEXF_NONE);
+            if (bMirror && m_pD3D9MirrorSurf) {
+                HRESULT hrUp = pDevice9->StretchRect(m_pD3D9MirrorSurf, nullptr, pBackBuffer, nullptr, D3DTEXF_LINEAR);
+                if (FAILED(hrUp)) hrUp = pDevice9->StretchRect(m_pD3D9MirrorSurf, nullptr, pBackBuffer, nullptr, D3DTEXF_POINT);
+                if (FAILED(hrUp)) pDevice9->StretchRect(m_pD3D9MirrorSurf, nullptr, pBackBuffer, nullptr, D3DTEXF_NONE);
+            }
             return;
         }
 
@@ -1178,7 +1201,9 @@ public:
         // All OpenXR compositor work is done. Now replace SBS backbuffer with single-eye
         // for the PC companion window. No GPU hazard since xrEndFrame already consumed pBackBuffer.
         if (bMirror && m_pD3D9MirrorSurf) {
-            pDevice9->StretchRect(m_pD3D9MirrorSurf, nullptr, pBackBuffer, nullptr, D3DTEXF_NONE);
+            HRESULT hrUp = pDevice9->StretchRect(m_pD3D9MirrorSurf, nullptr, pBackBuffer, nullptr, D3DTEXF_LINEAR);
+            if (FAILED(hrUp)) hrUp = pDevice9->StretchRect(m_pD3D9MirrorSurf, nullptr, pBackBuffer, nullptr, D3DTEXF_POINT);
+            if (FAILED(hrUp)) pDevice9->StretchRect(m_pD3D9MirrorSurf, nullptr, pBackBuffer, nullptr, D3DTEXF_NONE);
         }
     }
 
@@ -1204,6 +1229,8 @@ public:
         if (m_pD3D9SharedTex)   { m_pD3D9SharedTex->Release();   m_pD3D9SharedTex   = nullptr; }
         if (m_pD3D11SharedTex)  { m_pD3D11SharedTex->Release();  m_pD3D11SharedTex  = nullptr; }
         if (m_pD3D9MirrorSurf)  { m_pD3D9MirrorSurf->Release();  m_pD3D9MirrorSurf  = nullptr; }
+        m_nMirrorWidth    = 0;
+        m_nMirrorHeight   = 0;
         for (int i = 0; i < 2; i++) {
             if (m_pCPUFallbackSurf[i]) { m_pCPUFallbackSurf[i]->Release(); m_pCPUFallbackSurf[i] = nullptr; }
         }

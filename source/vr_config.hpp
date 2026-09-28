@@ -15,7 +15,9 @@ struct VRConfig {
     bool bEnableDepthSubmission = true; // Submit depth buffer to OpenXR for Asynchronous Spacewarp / Timewarp
 
     bool bForceWidescreen = true;
-    int iMirrorMode = 1;                // 0 = Aspect-fit / Pillarbox, 1 = Fullscreen 16:9 crop
+    int iMirrorMode = 0;                // 0 = Aspect-fit / Pillarbox, 1 = Fullscreen 16:9 crop, -1 = disabled
+    int iMirrorWidth = 1280;            // Desktop mirror resolution width (0 = disabled)
+    int iMirrorHeight = 720;            // Desktop mirror resolution height (0 = disabled)
     int iForcedWidth = 4128;            // High resolution width (split Width/2 per eye for stereo)
     int iForcedHeight = 2208;           // High resolution height
     int iDownscaleWidth = 2880;         // Max transfer width over PCIe (2880 = hardware GPU downscale, 0 = full native)
@@ -68,7 +70,9 @@ struct VRConfig {
             fHudScale = (float)atof(buf);
 
         bForceWidescreen = GetPrivateProfileIntA("Graphics", "ForceWidescreen", 1, iniPath) != 0;
-        iMirrorMode = GetPrivateProfileIntA("Graphics", "MirrorMode", 1, iniPath);
+        iMirrorMode = GetPrivateProfileIntA("Graphics", "MirrorMode", 0, iniPath);
+        iMirrorWidth = GetPrivateProfileIntA("Graphics", "MirrorWidth", 1280, iniPath);
+        iMirrorHeight = GetPrivateProfileIntA("Graphics", "MirrorHeight", 720, iniPath);
         iForcedWidth = GetPrivateProfileIntA("Graphics", "Width", 4128, iniPath);
         iForcedHeight = GetPrivateProfileIntA("Graphics", "Height", 2208, iniPath);
         iDownscaleWidth = GetPrivateProfileIntA("Graphics", "DownscaleWidth", 2880, iniPath);
@@ -117,11 +121,19 @@ struct VRConfig {
                 "[Graphics]\n"
                 "; MirrorMode: 0 = Aspect-fit / Pillarbox (clean single image centered on monitor with full HUD)\n"
                 ";             1 = Fullscreen 16:9 crop (fills monitor edge-to-edge)\n"
-                "MirrorMode=1\n\n"
+                ";            -1 = Disabled (no mirror output, saves maximum GPU power)\n"
+                "MirrorMode=0\n\n"
+                "; MirrorWidth / MirrorHeight: Resolution of the desktop mirror on PC monitor (e.g. 1280x720 for low GPU load; 0 = disabled)\n"
+                "MirrorWidth=1280\n"
+                "MirrorHeight=720\n\n"
                 "; Forced resolution for VR rendering (split into Width/2 x Height per eye)\n"
+                "; Width=2688, Height=1440 (VD Potato)\n"
+                "; Width=3456, Height=1824 (VD Low)\n"
+                "; Width=4224, Height=2304 (VD Medium)\n"
+                "; Width=4992, Height=2688 (VD High)\n"
                 "ForceWidescreen=1\n"
-                "Width=4128\n"
-                "Height=2208\n\n"
+                "Width=4224\n"
+                "Height=2304\n\n"
                 "; DownscaleWidth: Maximum transfer width over PCIe (2880 = hardware GPU downscale, 0 = full native)\n"
                 "DownscaleWidth=2880\n"
                 "; TransferThreads: Worker thread count for CPU memory copy (default: 4, keeps CPU usage low)\n"

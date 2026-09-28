@@ -22,7 +22,7 @@ Experience Duke Nukem's classic platformer in fully immersive stereoscopic 3D di
 ## Installation (For Players)
 
 1. Ensure you have a working copy of **Duke Nukem: Manhattan Project** (GOG or original CD release).
-2. Download the latest release package (`DukeNukemMP_VR_v1.0.zip`) from the [Releases](https://github.com/RetronovaVR/DukeNukemMP-VR/releases) page.
+2. Download the latest release package (`DukeNukemMP_VR_v1.1.zip`) from the [Releases](https://github.com/RetronovaVR/DukeNukemMP-VR/releases) page.
 3. Extract all files from the zip directly into your game's root directory (alongside `DukeNukemMP.exe`).
 4. Start your VR headset connection (Quest Link / AirLink / Virtual Desktop with VDXR / SteamVR).
 5. Launch `DukeNukemMP.exe`. The game will automatically output to your headset in full 3D VR.
@@ -62,14 +62,20 @@ TrackingPosScale=1.0       ; 1.0 = Natural 1:1 head movement
 CameraDistance=3           ; Camera distance pullback offset
 HudDepth=1.0               ; Virtual HUD distance in 3D space
 HudScale=0.65              ; HUD width relative to field of view
+EnableDepthSubmission=0    ; 1 = Submit depth buffer to OpenXR, 0 = disabled
 
 [Graphics]
-MirrorMode=1               ; 1 = Fullscreen 16:9 monitor companion window
+MirrorMode=0               ; 0 = Pillarbox, 1 = Fullscreen 16:9 crop, -1 = Disabled (saves GPU power)
+MirrorWidth=1280           ; Resolution of monitor mirror companion window (0 = disabled)
+MirrorHeight=720           ; (e.g. 1280x720 for minimal load)
 ForceWidescreen=1          ; Force high-res VR rendering
-Width=4128                 ; Per-frame rendering width (split into Width/2 per eye)
-Height=2208                ; Per-frame rendering height
+Width=4224                 ; Per-frame rendering width (split into Width/2 per eye)
+Height=2304                ; Per-frame rendering height
+DownscaleWidth=0           ; Hardware GPU downscale (0 = full native)
+TransferThreads=2          ; Worker threads for CPU memory copy
 FPSLimit=90                ; Target FPS limit
-Gamma=0.8                  ; Lens gamma correction
+Gamma=0.9                  ; Lens gamma correction
+Brightness=1.0             ; VR brightness multiplier
 ```
 
 ---
