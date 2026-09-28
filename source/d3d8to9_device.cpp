@@ -306,6 +306,7 @@ static void LimitFrameRate(int targetFps) {
 			Sleep(sleepMs - 1);
 		}
 		do {
+			YieldProcessor();
 			QueryPerformanceCounter(&curr);
 		} while ((curr.QuadPart - lastTime.QuadPart) < targetTicks);
 	}

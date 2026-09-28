@@ -22,9 +22,27 @@ static inline void CopyRowStreamingAVX2(BYTE* dst, const BYTE* src, size_t size)
 
 static inline void CopyRowWithGammaLUT(BYTE* dst, const BYTE* src, size_t size, const uint8_t* lut) {
     const uint32_t* src32 = reinterpret_cast<const uint32_t*>(src);
-    uint32_t* dst32 = reinterpret_cast<uint32_t*>(dst);
     size_t count = size / 4;
-    for (size_t i = 0; i < count; i++) {
+    size_t i = 0;
+
+    // Process 8 pixels (32 bytes) at a time using AVX2 non-temporal streaming stores
+    // Bypasses CPU cache allocation (RFO) on PCIe write-combined memory, eliminating CPU stall
+    for (; i + 8 <= count; i += 8) {
+        alignas(32) uint32_t outPx[8];
+        for (int p = 0; p < 8; p++) {
+            uint32_t px = src32[i + p];
+            uint32_t b = lut[px & 0xFF];
+            uint32_t g = lut[(px >> 8) & 0xFF];
+            uint32_t r = lut[(px >> 16) & 0xFF];
+            uint32_t a = px & 0xFF000000;
+            outPx[p] = a | (r << 16) | (g << 8) | b;
+        }
+        __m256i chunk = _mm256_load_si256(reinterpret_cast<const __m256i*>(outPx));
+        _mm256_stream_si256(reinterpret_cast<__m256i*>(dst + i * 4), chunk);
+    }
+
+    uint32_t* dst32 = reinterpret_cast<uint32_t*>(dst);
+    for (; i < count; i++) {
         uint32_t px = src32[i];
         uint32_t b = lut[px & 0xFF];
         uint32_t g = lut[(px >> 8) & 0xFF];
@@ -1003,7 +1021,8 @@ public:
                         UpdateGammaLUT(g_VRConfig.fGamma, g_VRConfig.fBrightness);
                     }
 
-                    #pragma omp parallel for schedule(static)
+                    int transferThreads = (g_VRConfig.iTransferThreads > 0) ? g_VRConfig.iTransferThreads : 4;
+                    #pragma omp parallel for schedule(static) num_threads(transferThreads)
                     for (int y = 0; y < h; y++) {
                         const BYTE* srcRow = (const BYTE*)lr.pBits + y * lr.Pitch;
                         BYTE* dstRow = (BYTE*)mapped.pData + y * mapped.RowPitch;

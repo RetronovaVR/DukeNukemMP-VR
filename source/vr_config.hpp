@@ -18,7 +18,8 @@ struct VRConfig {
     int iMirrorMode = 1;                // 0 = Aspect-fit / Pillarbox, 1 = Fullscreen 16:9 crop
     int iForcedWidth = 4128;            // High resolution width (split Width/2 per eye for stereo)
     int iForcedHeight = 2208;           // High resolution height
-    int iDownscaleWidth = 0;            // Max transfer width over PCIe (0 = disabled / full native)
+    int iDownscaleWidth = 2880;         // Max transfer width over PCIe (2880 = hardware GPU downscale, 0 = full native)
+    int iTransferThreads = 4;           // Max CPU worker threads for memory transfer (4 threads avoids 100% CPU starvation)
     int iFPSLimit = 90;                 // FPS limiter
     float fGamma = 0.8f;                // VR Gamma correction (0.8 = balanced shadows on Quest lenses)
     float fBrightness = 1.0f;           // VR Brightness multiplier
@@ -70,7 +71,10 @@ struct VRConfig {
         iMirrorMode = GetPrivateProfileIntA("Graphics", "MirrorMode", 1, iniPath);
         iForcedWidth = GetPrivateProfileIntA("Graphics", "Width", 4128, iniPath);
         iForcedHeight = GetPrivateProfileIntA("Graphics", "Height", 2208, iniPath);
-        iDownscaleWidth = GetPrivateProfileIntA("Graphics", "DownscaleWidth", 0, iniPath);
+        iDownscaleWidth = GetPrivateProfileIntA("Graphics", "DownscaleWidth", 2880, iniPath);
+        iTransferThreads = GetPrivateProfileIntA("Graphics", "TransferThreads", 4, iniPath);
+        if (iTransferThreads <= 0) iTransferThreads = 4;
+        if (iTransferThreads > 12) iTransferThreads = 12;
         iFPSLimit = GetPrivateProfileIntA("Graphics", "FPSLimit", 90, iniPath);
 
         if (GetPrivateProfileStringA("Graphics", "Gamma", "0.8", buf, sizeof(buf), iniPath))
@@ -118,8 +122,10 @@ struct VRConfig {
                 "ForceWidescreen=1\n"
                 "Width=4128\n"
                 "Height=2208\n\n"
-                "; DownscaleWidth: Maximum transfer width over PCIe (0 = full native transfer)\n"
-                "DownscaleWidth=0\n"
+                "; DownscaleWidth: Maximum transfer width over PCIe (2880 = hardware GPU downscale, 0 = full native)\n"
+                "DownscaleWidth=2880\n"
+                "; TransferThreads: Worker thread count for CPU memory copy (default: 4, keeps CPU usage low)\n"
+                "TransferThreads=4\n"
                 "FPSLimit=90\n\n"
                 "; VR Lens Gamma and Brightness tuning\n"
                 "; In-game hotkeys: Numpad * = increase gamma, Numpad / = decrease gamma\n"
